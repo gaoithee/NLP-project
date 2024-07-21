@@ -5,6 +5,8 @@ import pandas as pd
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
+from langchain_community.document_loaders import HuggingFaceDatasetLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 torch.random.manual_seed(0)
 
@@ -58,18 +60,24 @@ for i in range(len(test_dataset)):
 
 ##############################################################################
 
-# load a FAISS index and import the correct embedding and use it as a retriever
+loader = HuggingFaceDatasetLoader('saracandu/references-gsm8k', 'docs')
+documents = loader.load()
 
+# create an instance of the RecursiveCharacterTextSplitter class with specific parameters
+# (it splits text into chunks of 50 characters each with a 20-character overlap)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=20)
+
+# 'documents' holds the text you want to split, split the text into documents using the text splitter
+docs = text_splitter.split_documents(documents)
+
+# choose an embedding method
 embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",  
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-db = FAISS.load_local(
-    folder_path="../faiss_db", # where to find it
-    embeddings=embeddings, # in which "embedding language" it is expressed
-    index_name="GSM8K_FaissIndex_MiniLM", # since the folder contains multiple vector databases, specify its name
-    allow_dangerous_deserialization=True
-)
+# embed the documents 'docs' into vectors using the embedding method specified by 'embedding'
+# the result is stored in a FAISS index:
+db = FAISS.from_documents(docs, embeddings)
 
 retriever = db.as_retriever(
     search_kwargs={'k': 5,}
@@ -128,7 +136,7 @@ for i in range(len(test_dataset)):
     messages = create_message_baseline_1s_RAG(test_dataset['question'][i], relevant_passages)
     output = pipe(messages, **generation_args)
     answers_baseline_RAG_1s.append(output[0]['generated_text'])
-    answers_baseline_RAG_1s_def.append(estrai_numero(answers_baseline[i]))
+    answers_baseline_RAG_1s_def.append(estrai_numero(answers_baseline_RAG_1s[i]))
 
 ##############################################################################
 

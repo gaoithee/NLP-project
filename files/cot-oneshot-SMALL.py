@@ -7,13 +7,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 torch.random.manual_seed(0)
 
 model = AutoModelForCausalLM.from_pretrained(
-    "microsoft/Phi-3-mini-4k-instruct",
+    "microsoft/Phi-3-small-8k-instruct",
     device_map = "cuda",
     torch_dtype="auto",
     trust_remote_code=True,
 )
 
-tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-small-8k-instruct")
 
 pipe = pipeline(
     "text-generation",
@@ -43,19 +43,24 @@ def estrai_numero(input_string):
 
 correct_answers = []
 # for i in range(N_rows):
-#   correct_answers.append(estrai_numero(train_dataset['answer'][i]))
+#  correct_answers.append(estrai_numero(train_dataset['answer'][i]))
 for i in range(len(test_dataset)):
-   correct_answers.append(estrai_numero(test_dataset['answer'][i]))
+  correct_answers.append(estrai_numero(test_dataset['answer'][i]))
 
-def create_message_cot_zeroshot(question):
+def create_message_cot_oneshot(question):
     content = f"""
-    Question: "{question}" Let's think step by step.
+    Question: "{question}".
     """
 
     messages = [
         {"role": "system",
         "content": """
-        You are a helpful AI assistant asked to solve mathematical problems. Output your numerical answer only after these symbols ###.
+        You are a helpful AI assistant asked to solve mathematical problems.
+        Question: James writes a 3-page letter to 2 different friends twice a week. How many pages does he write a year?
+        """},
+        {"role": "assistant",
+        "content": """
+        Assistant: He writes each friend 3*2=6 pages a week So he writes 6*2=12 pages every week That means he writes 12*52=624 pages a year. ### 624
         """},
         {"role": "user",
         "content": content},
@@ -64,21 +69,23 @@ def create_message_cot_zeroshot(question):
     return messages
 
 
-answers_cot_0s = []
+answers_cot_1s = []
+answers_cot_1s_def = []
 
 for i in range(len(test_dataset)):
-    messages = create_message_cot_zeroshot(test_dataset['question'][i])
+    messages = create_message_cot_oneshot(test_dataset['question'][i])
     output = pipe(messages, **generation_args)
-    answers_cot_0s.append(output[0]['generated_text'])
+    answers_cot_1s.append(output[0]['generated_text'])
+    answers_cot_1s_def.append(estrai_numero(answers_cot_1s[i]))
 
 # queries = train_dataset['question']
-queries = test_dataset['queries']
+queries = test_dataset['question']
 
 df = {
     'query': queries,
     'correct': correct_answers,
-    'answer': answers_cot_0s
+    'answer': answers_cot_1s_def
 }
 
 df = pd.DataFrame.from_dict(df)
-df.to_csv('testset-cot-zeroshot.csv')
+df.to_csv('testset-cot-oneshot-SMALL.csv')

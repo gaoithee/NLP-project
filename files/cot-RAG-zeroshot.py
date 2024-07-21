@@ -8,11 +8,12 @@ from langchain.vectorstores import FAISS
 from langchain_community.document_loaders import HuggingFaceDatasetLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+import warnings
+warnings.filterwarnings("ignore")
+
+###########################################################################
+
 torch.random.manual_seed(0)
-
-##############################################################################
-
-# upload the model and the tokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/Phi-3-mini-4k-instruct",
@@ -23,9 +24,6 @@ model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
-##############################################################################
-
-# construct the pipeline and fix the generation arguments
 pipe = pipeline(
     "text-generation",
     model=model,
@@ -38,7 +36,7 @@ generation_args = {
     "do_sample": False,
 }
 
-##############################################################################
+###########################################################################
 
 # load the dataset and select the test set 
 dataset = load_dataset('openai/gsm8k', 'main')
@@ -58,7 +56,7 @@ correct_answers = []
 for i in range(len(test_dataset)):
   correct_answers.append(estrai_numero(test_dataset['answer'][i]))
 
-##############################################################################
+###########################################################################
 
 loader = HuggingFaceDatasetLoader('saracandu/references-gsm8k', 'docs')
 documents = loader.load()
@@ -83,9 +81,7 @@ retriever = db.as_retriever(
     search_kwargs={'k': 5,}
 )
 
-##############################################################################
-
-# function to format the retrieved documents in a proper way 
+###########################################################################
 
 def format_page_content(documents):
     """
@@ -98,14 +94,12 @@ def format_page_content(documents):
         formatted_output += f"[{i}]: {content}\n"
     return formatted_output
 
-##############################################################################
+###########################################################################
 
-# function to create the prompt for each question
-
-def create_message_baseline_RAG(question, context):
+def create_message_cot_RAG(question, context):
     content = f"""
     Question: "{question}";
-    Context: "{context}". 
+    Context: "{context}". Let's think step by step.
     """
 
     messages = [
@@ -120,26 +114,25 @@ def create_message_baseline_RAG(question, context):
 
     return messages
 
-##############################################################################
+###########################################################################
 
-answers_baseline_RAG = []
-answers_baseline_RAG_def = []
+answers_cot_RAG_0s = []
 
 for i in range(len(test_dataset)):
     relevant_passages = format_page_content(retriever.invoke(test_dataset['question'][i]))
-    messages = create_message_baseline_RAG(test_dataset['question'][i], relevant_passages)
+    messages = create_message_cot_RAG(test_dataset['question'][i], relevant_passages)
     output = pipe(messages, **generation_args)
-    answers_baseline_RAG.append(output[0]['generated_text'])
-    answers_baseline_RAG_def.append(estrai_numero(answers_baseline_RAG[i]))
+    answers_cot_RAG_0s.append(output[0]['generated_text'])
 
-##############################################################################
+###########################################################################
+
+queries = test_dataset['queries']
 
 df = {
-    'query': test_dataset['question'],
+    'query': queries,
     'correct': correct_answers,
-    'long answer': answers_baseline_RAG,
-    'answer': answers_baseline_RAG_def
+    'answer': answers_cot_RAG_0s
 }
 
 df = pd.DataFrame.from_dict(df)
-df.to_csv('testset-baseline-RAG-zeroshot.csv')
+df.to_csv('testset-cot-RAG-zeroshot.csv')
